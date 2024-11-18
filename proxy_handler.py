@@ -53,7 +53,7 @@ async def generate_random_user_agent():
 async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
     async with semaphore:
         retries = 0
-        backoff = 0.5  # Backoff mulai dari 0.5 detik
+        backoff = 0.5
         device_id = str(uuid.uuid4())
 
         while retries < proxy_retry_limit:
@@ -70,9 +70,7 @@ async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
                 uri = random.choice(["wss://proxy.wynd.network:4444/", "wss://proxy.wynd.network:4650/"])
                 proxy = Proxy.from_url(socks5_proxy)
 
-                # Menghubungkan tanpa SSL/TLS context
                 async with proxy_connect(uri, proxy=proxy, extra_headers=custom_headers) as websocket:
-
                     async def send_ping():
                         while True:
                             ping_message = json.dumps({
@@ -114,23 +112,29 @@ async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
             except Exception as e:
                 retries += 1
                 logger.error("Koneksi gagal, mencoba lagi...", color="<red>")
-                await asyncio.sleep(min(backoff, 2))  # Exponential backoff
-                backoff *= 1.2  
+                await asyncio.sleep(min(backoff, 2))
+                backoff *= 1.2
 
         if retries >= proxy_retry_limit:
             proxy_failures.append(socks5_proxy)
             logger.info(f"Proxy {socks5_proxy} telah dihapus", color="<orange>")
 
+# Fungsi untuk memuat dan memformat daftar proxy
+def load_and_format_proxies(proxy_file):
+    with open(proxy_file, 'r') as file:
+        proxies = file.read().splitlines()
+    # Tambahkan 'http://' jika tidak ada
+    formatted_proxies = [proxy if proxy.startswith("http://") else f"http://{proxy}" for proxy in proxies]
+    return formatted_proxies
+
 # Fungsi untuk memuat ulang daftar proxy
 async def reload_proxy_list(proxy_file):
-    with open(proxy_file, 'r') as file:
-        local_proxies = file.read().splitlines()
+    local_proxies = load_and_format_proxies(proxy_file)
     logger.info(f"Daftar proxy dari {proxy_file} telah dimuat pertama kali.")
     
     while True:
-        await asyncio.sleep(reload_interval)  # Tunggu interval sebelum reload berikutnya
-        with open(proxy_file, 'r') as file:
-            local_proxies = file.read().splitlines()
+        await asyncio.sleep(reload_interval)
+        local_proxies = load_and_format_proxies(proxy_file)
         logger.info(f"Daftar proxy dari {proxy_file} telah dimuat ulang.")
         return local_proxies
 
@@ -138,11 +142,10 @@ async def main(proxy_file, user_id):
     # Cek pembaruan skrip dari GitHub
     auto_update_script()
 
-    start_time = time.time()  # Waktu mulai program
+    start_time = time.time()
 
     # Load proxy pertama kali tanpa delay
-    with open(proxy_file, 'r') as file:
-        local_proxies = file.read().splitlines()
+    local_proxies = load_and_format_proxies(proxy_file)
     logger.info(f"Daftar proxy dari {proxy_file} pertama kali dimuat.")
     
     # Task queue untuk membagi beban
@@ -153,7 +156,7 @@ async def main(proxy_file, user_id):
     # Memulai task reload proxy secara berkala
     proxy_list_task = asyncio.create_task(reload_proxy_list(proxy_file))
 
-    semaphore = asyncio.Semaphore(max_concurrent_connections)  # Batasi koneksi bersamaan
+    semaphore = asyncio.Semaphore(max_concurrent_connections)
     proxy_failures = []
 
     tasks = []
@@ -170,5 +173,5 @@ async def process_proxy(queue, user_id, semaphore, proxy_failures):
 
 if __name__ == "__main__":
     user_id = input("Masukkan user ID Anda: ")
-    proxy_file = 'proxy_1.txt'  # Ubah ini sesuai dengan file proxy yang digunakan
+    proxy_file = 'proxy_1.txt'
     asyncio.run(main(proxy_file, user_id))
