@@ -1,6 +1,5 @@
 import asyncio
 import random
-import ssl
 import json
 import time
 import uuid
@@ -41,16 +40,12 @@ user_agent = UserAgent(os='windows', platforms='pc', browsers='chrome')
 # Fungsi pembaruan otomatis dari GitHub
 def auto_update_script():
     logger.info("Memeriksa pembaruan skrip di GitHub...")
-    # Lakukan `git pull` jika tersedia
     if os.path.isdir(".git"):
         call(["git", "pull"])
         logger.info("Skrip diperbarui dari GitHub.")
     else:
         logger.warning("Repositori ini belum di-clone menggunakan git. Silakan clone menggunakan git untuk fitur auto-update.")
         exit()
-
-# Fungsi untuk memeriksa kode aktivasi
-# Kode aktivasi telah dihapus
 
 async def generate_random_user_agent():
     return user_agent.random
@@ -72,15 +67,11 @@ async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
                     "Connection": "keep-alive"
                 }
 
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-
                 uri = random.choice(["wss://proxy.wynd.network:4444/", "wss://proxy.wynd.network:4650/"])
                 proxy = Proxy.from_url(socks5_proxy)
 
-                async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname="proxy.wynd.network",
-                                         extra_headers=custom_headers) as websocket:
+                # Menghubungkan tanpa SSL/TLS context
+                async with proxy_connect(uri, proxy=proxy, extra_headers=custom_headers) as websocket:
 
                     async def send_ping():
                         while True:
@@ -122,7 +113,7 @@ async def connect_to_wss(socks5_proxy, user_id, semaphore, proxy_failures):
 
             except Exception as e:
                 retries += 1
-                logger.error(f"ERROR: {e}", color="<red>")
+                logger.error("Koneksi gagal, mencoba lagi...", color="<red>")
                 await asyncio.sleep(min(backoff, 2))  # Exponential backoff
                 backoff *= 1.2  
 
@@ -146,6 +137,8 @@ async def reload_proxy_list(proxy_file):
 async def main(proxy_file, user_id):
     # Cek pembaruan skrip dari GitHub
     auto_update_script()
+
+    start_time = time.time()  # Waktu mulai program
 
     # Load proxy pertama kali tanpa delay
     with open(proxy_file, 'r') as file:
